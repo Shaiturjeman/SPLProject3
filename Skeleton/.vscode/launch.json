@@ -6,6 +6,13 @@
     "configurations": [
         {
             "type": "java",
+            "name": "main",
+            "request": "launch",
+            "mainClass": "main",
+            "projectName": "server"
+        },
+        {
+            "type": "java",
             "name": "Launch EchoServer",
             "request": "launch",
             "mainClass": "bgu.spl.net.impl.echo.EchoServer",
