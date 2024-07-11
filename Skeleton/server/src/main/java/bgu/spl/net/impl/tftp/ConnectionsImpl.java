@@ -20,7 +20,7 @@ public class ConnectionsImpl<T> implements Connections<T>{
 
     //changed to boolean
     @Override
-    public boolean connect(int connectionId, BlockingConnectionHandler<T> handler) {
+    public boolean connect(int connectionId, ConnectionHandler<T> handler) {
         if(connectionsMap.containsKey(connectionId)){
             return false;
         }
