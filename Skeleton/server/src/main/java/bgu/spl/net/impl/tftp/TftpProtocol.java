@@ -21,6 +21,7 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
     private boolean shouldTerminate = false;
     private int connectionId;
     private Connections<byte[]> connections;
+    static ConcurrentHashMap<Integer, String> LogedUsers = new ConcurrentHashMap<>();
     byte[] dataToSend;
     List<Byte> dataToReceive;
     ConcurrentHashMap<String,File> fileMap;
@@ -42,44 +43,40 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
         //RRQ (Read Request)
         if(opCodeMessage == 1){
-            proccesRRQ(message);
+            processRRQ(message);
             
         }
         //WRQ (Write Request)
         else if(opCodeMessage == 2){
-            proccesWRQ(message);
+            processWRQ(message);
         }
         //DATA (Data Packet)
         else if(opCodeMessage == 3){
-            proccesDATAIn(message);
+            processDATAIn(message);
         }
         //ACK(ACK Packet)
         else if(opCodeMessage == 4){
-            proccesACK(message);
-        }
-        //ERROR
-        else if(opCodeMessage == 5){
-            //proccesERROR(message);
+            processACK(message);
         }
         //DIRQ
         else if(opCodeMessage == 6){
-            //proccesDIRQ(message);
+            processDIRQ(message);
         }
         //LOGRQ
         else if(opCodeMessage == 7){
-            //proccesLOGRQ(message);
+            processLOGRQ(message);
         }
         //DELRQ
         else if(opCodeMessage == 8){
-            //proccesDELRQ(message);
+            processDELRQ(message);
         }
         //BCAST
-        else if(opCodeMessage == 9){
-            //proccesBCAST(message);
-        }
+        // else if(opCodeMessage == 9){
+        //     processBCAST(message);
+        // }
         //DISC
         else if(opCodeMessage == 10){
-            //proccesDISC(message);
+            processDISC(message);
         }
 
 
@@ -87,8 +84,12 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
     @Override
     public boolean shouldTerminate() {
-        // TODO implement this
-        throw new UnsupportedOperationException("Unimplemented method 'shouldTerminate'");
+        if(shouldTerminate){
+            this.connections.disconnect(connectionId);
+            LogedUsers.remove(connectionId);
+            
+        }
+        return true;
     } 
 
     public TftpProtocol(){
@@ -107,7 +108,7 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
     
 
-    private void proccesRRQ(byte[] message){
+    private void processRRQ(byte[] message){
         int erorr = -1;
         boolean FileExist = false;
 
@@ -121,7 +122,8 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
                 try{
                     File file = fileMap.get(fileName);
                     dataToSend = Files.readAllBytes(file.toPath());
-                    connections.send(connectionId, dataToSend);
+                    byte[] packetToSend = createDataPacket(blockNumber, 0, dataToSend);
+                    connections.send(connectionId, packetToSend);
                 } catch (IOException e){
                     e.printStackTrace();
 
@@ -143,10 +145,8 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
         }
 
-    private void proccesWRQ(byte[] message){
+    private void processWRQ(byte[] message){
         int erorr = -1;
-        boolean FileExist = false;
-
 
         //chekcing if the user is connected
         if(connections.connected(connectionId)){
@@ -154,7 +154,6 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
             String fileName = new String(message, 1, message.length - 1, StandardCharsets.UTF_8);
             //checking if the file exist
             if(fileMap.containsKey(fileName)){
-                FileExist = true;
                 erorr = 5; //FILE ALREADY EXIST ERROR, FILE NAME EXISTS IN THE SERVER
                 byte[] errorArray = errorClassify(erorr);
                 connections.send(connectionId, errorArray);
@@ -183,7 +182,7 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
     }
 
-    private void proccesDATAIn(byte[] message){
+    private void processDATAIn(byte[] message){
         int erorr = -1;
 
         //checking if the user is connected
@@ -212,7 +211,7 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
                 Files.write(path, dataBytes); // writing the data to the file, if the file doesn't exist, it will create it
                 File file = new File(folderPath);
                 fileMap.put(fileString, file); // updating the file in the fileMap
-                ProcessBCAST(fileString, 1); // broadcasting that the file name  was added to the server, to all of the users
+                processBCAST(((byte[])fileString.getBytes()), 1); // broadcasting that the file name  was added to the server, to all of the users
             } catch (IOException e){
                 e.printStackTrace();
             }
@@ -223,7 +222,7 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
         }
 
-    private void proccesACK(byte[] message){
+    private void processACK(byte[] message){
         int erorr = -1;
         if(!connections.connected(connectionId)){
             erorr = 6; //LOGRQ ERROR
@@ -253,6 +252,7 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
             packetToSend[4] = blockNumberBytes[0];
             packetToSend[5] = blockNumberBytes[1];
 
+            //data bytes (if the dataToSend array is bigger than 512 bytes, we will send only 512 bytes, otherwise we will send the rest of the data)
             for(int i = 6; i < packetToSend.length; i++){
                 packetToSend[i] = dataToSend[ACKBlockNumber*512 + i];
             }
@@ -276,21 +276,144 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
         return ACK;
     }
 
-
-        
-        
-
-
-
     private  byte[] errorClassify(int error){
-        byte[] errorArray = new byte[5];
-        errorArray[0] = 0;
-        errorArray[1] = 5;
-        errorArray[2] = 0;
-        errorArray[3] = error;
-        errorArray[4] = 0;
-        return errorArray;
+        String Error0 = "Not defined, see error message (if any).";
+        String Error1 = "File not found – RRQ DELRQ of non-existing file.";
+        String Error2 = "Access violation - File cannot be written,read or deleted.";
+        String Error3 = "Disk full or allocation exceeded - No room in disk.";
+        String Error4 = "Illegal TFTP operation - Unknown Opcode.";
+        String Error5 = "File already exists -File name exists on WRQ.";
+        String Error6 = "User not logged in - Any opcode received before Login completes.";
+        String Error7 = "User already logged in - Login username already connected.";
+        
+        
+
     }
+
+
+    private void processDIRQ(byte[] message){
+        int erorr = -1;
+        //checking if the user is connected
+        if(!connections.connected(connectionId)){
+            erorr = 6; //LOGRQ ERROR
+            byte[] errorArray = errorClassify(erorr);
+            connections.send(connectionId, errorArray);
+        }
+        else{
+            //creating a string that contains all of the files in the server
+            String filesList = "";
+            for(Map.Entry<String, File> entry : fileMap.entrySet()){
+                //adding the file name to the string
+                filesList += entry.getKey() + '\0';
+            }
+            //converting the string to bytes
+            byte[] filesListBytes = filesList.getBytes();
+            //sending the files list to the client
+            byte[] packetToSend = createDataPacket(blockNumber, 0, filesListBytes);
+            connections.send(connectionId, packetToSend);
+        }
+    }
+
+    private void processLOGRQ(byte[] message){
+        int erorr = -1;
+        //checking if the user is connected
+        if(connections.connected(connectionId)){
+            erorr = 7; //USER ALREADY CONNECTED ERROR
+            byte[] errorArray = errorClassify(erorr);
+            connections.send(connectionId, errorArray);
+        }
+
+        else{
+            //converting the message to string
+            String userName = new String(message, 1, message.length - 1, StandardCharsets.UTF_8);
+            //checking if the user name is already in the server
+            if(LogedUsers.contains(userName)){
+                erorr = 0; //user name already exist
+                byte[] errorArray = errorClassify(erorr);
+                connections.send(connectionId, errorArray);
+            }
+            else{
+                LogedUsers.put(connectionId, userName);
+                connections.send(connectionId, ACKout((short)0));
+            }
+        
+        }
+        
+    }
+
+    private void processDELRQ(byte[] message){
+        int erorr = -1;
+        //checking if the user is connected
+        if(!connections.connected(connectionId)){
+            erorr = 6; //LOGRQ ERROR
+            byte[] errorArray = errorClassify(erorr);
+            connections.send(connectionId, errorArray);
+        }
+        else{
+            //converting the message to string
+            String fileName = new String(message, 1, message.length - 1, StandardCharsets.UTF_8);
+            //checking if the file exist
+            if(fileMap.containsKey(fileName)){
+                File file = fileMap.get(fileName);
+                file.delete();
+                fileMap.remove(fileName);
+                processBCAST(fileName.getBytes(), 0);
+            }
+            else{
+                erorr = 1; //FILE NOT FOUND ERROR
+                byte[] errorArray = errorClassify(erorr);
+                connections.send(connectionId, errorArray);
+            }
+        }
+    }
+
+    private void processBCAST(byte[] message,int delOrAdd){
+        int erorr = -1;
+        //checking if the user is connected
+        if(!connections.connected(connectionId)){
+            erorr = 6; //LOGRQ ERROR
+            byte[] errorArray = errorClassify(erorr);
+            connections.send(connectionId, errorArray);
+        }
+        else{
+            byte[] broadMess = new byte[message.length + 4];
+            broadMess[0] = (byte)0;
+            broadMess[1] = (byte)9;
+            broadMess[2] = (byte)delOrAdd;
+            for(int i = 0; i< message.length; i++){
+                broadMess[i+3] = message[i];
+            }
+            broadMess[broadMess.length -1] = (byte)0;
+            for(int i = 0; i< LogedUsers.size(); i++){
+                connections.send(i, broadMess);
+            }
+
+        }
+    }
+
+    private void processDISC(byte[] message){
+        int error =-1;
+        //checking if the user is connected
+        if(!connections.connected(connectionId)){
+            error = 6; //LOGRQ ERROR
+            byte[] errorArray = errorClassify(error);
+            connections.send(connectionId, errorArray);
+        }
+        else{
+            shouldTerminate = true;
+            connections.send(connectionId, ACKout((short)0));
+            shouldTerminate();
+        }
+    }
+
+
+
+
+        
+        
+
+
+
 
     private byte[] shortToBytes(short num){
         return new byte[]{(byte)(num >>8) , (byte)(num & 0xFF)};
@@ -300,6 +423,35 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
         return (short) ((((short)(byteArray[start]) & 0xFF) << 8 | (short)(byteArray[end] & 0xFF)));
         
     }
+
+    private byte[] createDataPacket(short blockNumber, int startIndex, byte[] inputData) {
+        // Determine the size of the remaining data to send in the packet
+        int remainingDataSize = Math.min(512, inputData.length - startIndex);
+        byte[] packet = new byte[remainingDataSize + 6];
+    
+        packet[0] = (byte) 0;
+        packet[1] = (byte) 3;
+    
+        byte[] sizeBytes = shortToBytes((short) remainingDataSize);
+        packet[2] = sizeBytes[0];
+        packet[3] = sizeBytes[1];
+    
+        byte[] blockNumBytes = shortToBytes(blockNumber);
+        packet[4] = blockNumBytes[0];
+        packet[5] = blockNumBytes[1];
+    
+        for (int i = 6; i < packet.length; i++) {
+            packet[i] = inputData[startIndex + i - 6];
+        }
+        
+        return packet;
+    }
+    
+
+    
+    
+
+
 
 
 
