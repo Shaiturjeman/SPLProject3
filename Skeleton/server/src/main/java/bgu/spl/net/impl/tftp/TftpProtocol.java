@@ -132,22 +132,22 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
 
             
         }
-        else{
-            erorr = 6; //LOGRQ ERROR
-            byte[] errorArray = errorClassify(erorr);
-            connections.send(connectionId, errorArray);
-        }
         if(!FileExist){
             erorr = 1; //FILE NOT FOUND ERROR
             byte[] errorArray = errorClassify(erorr);
             connections.send(connectionId, errorArray);
         }
+        else{
+            erorr = 6; //LOGRQ ERROR
+            byte[] errorArray = errorClassify(erorr);
+            connections.send(connectionId, errorArray);
+        }
+
 
         }
 
     private void processWRQ(byte[] message){
         int erorr = -1;
-
         //chekcing if the user is connected
         if(connections.connected(connectionId)){
             //converting the message to string
@@ -277,6 +277,8 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
     }
 
     private  byte[] errorClassify(int error){
+
+        // defining the errors 
         String Error0 = "Not defined, see error message (if any).";
         String Error1 = "File not found – RRQ DELRQ of non-existing file.";
         String Error2 = "Access violation - File cannot be written,read or deleted.";
@@ -286,6 +288,88 @@ public class TftpProtocol implements BidiMessagingProtocol<byte[]>  {
         String Error6 = "User not logged in - Any opcode received before Login completes.";
         String Error7 = "User already logged in - Login username already connected.";
         
+        //converting the error to bytes
+        byte[] error0 = Error0.getBytes();
+        byte[] error1 = Error1.getBytes();
+        byte[] error2 = Error2.getBytes();
+        byte[] error3 = Error3.getBytes();
+        byte[] error4 = Error4.getBytes();
+        byte[] error5 = Error5.getBytes();
+        byte[] error6 = Error6.getBytes();
+        byte[] error7 = Error7.getBytes();
+
+        //preparing the errorPacket for sending
+        byte[] errorPacket ;
+        switch(error){
+            case 0:
+                errorPacket = new byte[error0.length + 5];
+                for(int i =0; i< error0.length ; i++){
+                    errorPacket[i=4] = error0[i];
+                }
+                break;
+            case 1:
+                errorPacket = new byte[error1.length + 5];
+                for(int i =0; i< error1.length ; i++){
+                    errorPacket[i=4] = error1[i];
+                }
+                break;
+            case 2:
+                errorPacket = new byte[error2.length + 5];
+                for(int i =0; i< error2.length ; i++){
+                    errorPacket[i=4] = error2[i];
+                }
+                break;
+            case 3:
+                errorPacket = new byte[error3.length + 5];
+                for(int i =0; i< error3.length ; i++){
+                    errorPacket[i=4] = error3[i];
+            }
+            break;
+            case 4:
+                errorPacket = new byte[error4.length + 5];
+                for(int i =0; i< error4.length ; i++){
+                    errorPacket[i=4] = error4[i];
+                }
+                break;
+            case 5:
+                errorPacket = new byte[error5.length + 5];
+                for(int i =0; i< error5.length ; i++){
+                    errorPacket[i=4] = error5[i];
+                }
+                break;
+            case 6:
+                errorPacket = new byte[error6.length + 5];
+                for(int i =0; i< error6.length ; i++){
+                    errorPacket[i=4] = error6[i];
+                }
+                break;
+            case 7:
+                errorPacket = new byte[error7.length + 5];
+                for(int i =0; i< error7.length ; i++){
+                    errorPacket[i=4] = error7[i];
+                }
+                break;
+            default:
+                errorPacket = new byte[error1.length + 5];
+                for(int i =0; i< error0.length ; i++){
+                    errorPacket[i=4] = error1[i];
+                }
+                break;
+
+
+        }
+        //compliting the error message by the format
+        errorPacket[0] = (byte)0;
+        errorPacket[1] = (byte)5;
+        errorPacket[2] = shortToBytes((short)error)[0]; //accesing the first elemnt of the byte array returned by the function
+        errorPacket[3] = shortToBytes((short)error)[1];
+        errorPacket[errorPacket.length-1] = (byte)0;
+        return errorPacket;
+        
+
+
+
+
         
 
     }

@@ -1,22 +1,23 @@
 package bgu.spl.net.srv;
 
 import bgu.spl.net.api.MessageEncoderDecoder;
-import bgu.spl.net.api.MessagingProtocol;
+import bgu.spl.net.api.BidiMessagingProtocol;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.text.Bidi;
 
 public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler<T> {
 
-    private final MessagingProtocol<T> protocol;
+    private final BidiMessagingProtocol<T> protocol;
     private final MessageEncoderDecoder<T> encdec;
     private final Socket sock;
     private BufferedInputStream in;
     private BufferedOutputStream out;
     private volatile boolean connected = true;
 
-    public BlockingConnectionHandler(Socket sock, MessageEncoderDecoder<T> reader, MessagingProtocol<T> protocol) {
+    public BlockingConnectionHandler(Socket sock, MessageEncoderDecoder<T> reader, BidiMessagingProtocol<T> protocol) {
         this.sock = sock;
         this.encdec = reader;
         this.protocol = protocol;
@@ -25,19 +26,19 @@ public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler
     @Override
     public void run() {
         try (Socket sock = this.sock) { //just for automatic closing
-            int read;
+            int read; // will be used to store the result of reading from the input stream
 
-            in = new BufferedInputStream(sock.getInputStream());
-            out = new BufferedOutputStream(sock.getOutputStream());
+            in = new BufferedInputStream(sock.getInputStream());// to read form the input stream od the socket
+            out = new BufferedOutputStream(sock.getOutputStream()); // to wrtie to the output stream of the socket
 
-            while (!protocol.shouldTerminate() && connected && (read = in.read()) >= 0) {
-                T nextMessage = encdec.decodeNextByte((byte) read);
+            
+            // this continuos as long as the protocol does not indicate termination, the connection is active and there 
+            // data to read from the input stream
+
+            while (!protocol.shouldTerminate() && connected && (read = in.read()) >= 0) {// this continuos as long as the protocol
+                T nextMessage = encdec.decodeNextByte((byte) read); //decodes the next bytre from the input stream 
                 if (nextMessage != null) {
-                    T response = protocol.process(nextMessage);
-                    if (response != null) {
-                        out.write(encdec.encode(response));
-                        out.flush();
-                    }
+                    protocol.process(nextMessage);  // if its not null its processed by the protocol
                 }
             }
 
@@ -55,6 +56,14 @@ public class BlockingConnectionHandler<T> implements Runnable, ConnectionHandler
 
     @Override
     public void send(T msg) {
-        //IMPLEMENT IF NEEDED
+        try{
+            if(msg !=null){
+                out.write(encdec.encode(msg));
+                out.flush();
+            }
+
+        }catch(IOException er){
+            er.printStackTrace();
+        }
     }
 }
