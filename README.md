@@ -1,0 +1,1 @@
+This project implements an extended version of the Trivial File Transfer Protocol (TFTP) using Java. The TFTP server and client are designed to allow multiple users to upload, download, and manage files on the server, with support for broadcasting file changes to all connected clients.
